@@ -93,6 +93,7 @@ details[open] summary{margin-bottom:10px}
       <label for="Von">Von (GPT 2차) [V]<input id="Von" inputmode="decimal" value="190"></label>
       <label for="tol">허용오차 [%]<input id="tol" inputmode="decimal" value="5"></label>
       <label for="tolms">순시·ms 허용오차 [ms]<input id="tolms" inputmode="decimal" value="20"></label>
+      <label for="ctp">CT 1차 [A] (설정이 1차 A일 때)<input id="ctp" inputmode="decimal" value="100"></label>
       <label for="maxA">시험기 최대 전류 [A]<input id="maxA" inputmode="decimal" value="20"></label>
     </div>
   </details>
@@ -122,34 +123,34 @@ const TOLF = [
 
 const E = {
   '50':  { name: '50 / 50G 순시 과전류 (OCR·OCGR I>>)', desc: '50G도 같은 계산. 50G는 In(N) 단자 한 곳에 주입. 시험기 최대 전류를 넘을 때만 시험용 배수로 바꿔 시험 후 환원',
-    fields: [ {id:'m', label:'순시 설정 [In]', value:10}, {id:'td', label:'TIME DELAY [ms]', value:250},
-              {id:'tm', label:'시험용 변경 [In] (최대 전류 초과 시만)', value:2}, {id:'p', label:'동작시간 주입 [%]', value:110} ] },
+    fields: [ {id:'u', label:'설정 단위', type:'select', options:['In 배수','A (2차)','A (1차)'], value:'In 배수'}, {id:'m', label:'순시 설정', value:10}, {id:'td', label:'TIME DELAY [ms]', value:250},
+              {id:'tm', label:'시험용 변경 (같은 단위, 최대 전류 초과 시만)', value:2}, {id:'p', label:'동작시간 주입 [%]', value:110} ] },
   '51':  { name: '51 / 51G 한시 과전류 (OCR·OCGR I>)', desc: '반한시: 전류가 클수록 빨리 동작',
-    fields: [ {id:'m', label:'한시 설정 [In]', value:1}, curveSel('cv'), {id:'tl', label:'레버 (TL)', value:0.26},
+    fields: [ {id:'u', label:'설정 단위', type:'select', options:['In 배수','A (2차)','A (1차)'], value:'In 배수'}, {id:'m', label:'한시 설정', value:1}, curveSel('cv'), {id:'tl', label:'레버 (TL)', value:0.26},
               {id:'c', label:'추가시간 C [s]', value:0}, {id:'p1', label:'주입 1 [%]', value:200}, {id:'p2', label:'주입 2 [%]', value:300} ] },
   '27':  { name: '27 부족전압 (UVR)', desc: '전압을 내리면서 픽업 확인', fields: [
-              {id:'m', label:'설정 [Vn]', value:0.8}, {id:'td', label:'TIME DELAY [s]', value:2}, {id:'p', label:'동작시간 주입 [%]', value:80} ] },
+              {id:'u', label:'설정 단위', type:'select', options:['Vn 배수','V (2차)'], value:'Vn 배수'}, {id:'m', label:'설정', value:0.8}, {id:'td', label:'TIME DELAY [s]', value:2}, {id:'p', label:'동작시간 주입 [%]', value:80} ] },
   '59':  { name: '59 과전압 (OVR)', desc: '전압을 올리면서 픽업 확인', fields: [
-              {id:'m', label:'설정 [Vn]', value:1.1}, {id:'td', label:'TIME DELAY [s]', value:2}, {id:'p', label:'동작시간 주입 [%]', value:120} ] },
+              {id:'u', label:'설정 단위', type:'select', options:['Vn 배수','V (2차)'], value:'Vn 배수'}, {id:'m', label:'설정', value:1.1}, {id:'td', label:'TIME DELAY [s]', value:2}, {id:'p', label:'동작시간 주입 [%]', value:120} ] },
   '64':  { name: '64 지락 과전압 (OVGR)', desc: 'GPT 영상전압 Vo 단자에 인가', fields: [
-              {id:'m', label:'설정 [Von]', value:0.2}, {id:'td', label:'TIME DELAY [s]', value:2}, {id:'p', label:'동작시간 주입 [%]', value:120} ] },
+              {id:'u', label:'설정 단위', type:'select', options:['Von 배수','V (2차)'], value:'Von 배수'}, {id:'m', label:'설정', value:0.2}, {id:'td', label:'TIME DELAY [s]', value:2}, {id:'p', label:'동작시간 주입 [%]', value:120} ] },
   '47P': { name: '47P 결상·전압 불평형 (POR)', desc: '두 상은 정격, 한 상만 내려서 불평형률 계산', fields: [
               {id:'s', label:'설정 불평형률 [%]', value:20}, {id:'td', label:'TIME DELAY [s]', value:2}, {id:'p', label:'동작시간: 한 상 [% of Vn]', value:80} ] },
   '46':  { name: '46 역상 과전류 (NSOCR)', desc: '3상 상순 반대로 주입하면 상전류 = I2', fields: [
-              {id:'m', label:'I2 설정 [In]', value:0.08}, {id:'td', label:'TIME DELAY [s]', value:4}, {id:'p', label:'동작시간 주입 [%]', value:200} ] },
+              {id:'u', label:'설정 단위', type:'select', options:['In 배수','A (2차)','A (1차)'], value:'In 배수'}, {id:'m', label:'I2 설정', value:0.08}, {id:'td', label:'TIME DELAY [s]', value:4}, {id:'p', label:'동작시간 주입 [%]', value:200} ] },
   '67G': { name: '67G 방향 지락 (SGR)', desc: 'ZCT 2차 설정 → 1차 주입값으로 환산', fields: [
               {id:'vo', label:'Vo 설정 [V]', value:38}, {id:'io', label:'Io 설정 (2차) [mA]', value:0.9},
               {id:'z1', label:'ZCT 1차 [mA]', value:200}, {id:'z2', label:'ZCT 2차 [mA]', value:1.5},
               {id:'rca', label:'RCA [°]', value:45}, {id:'w', label:'동작영역 ± [°]', value:87},
               {id:'at', label:'위상 허용 ± [°]', value:6}, {id:'td', label:'TIME DELAY [ms]', value:500} ] },
   '48':  { name: '48 STALL (스톨, 정한시)', desc: 'GIPAM 기준 운전 중 보호. START TIME이 있으면 더해짐', fields: [
-              {id:'m', label:'STALL 설정 [In]', value:0.9}, {id:'td', label:'TIME DELAY [s]', value:3},
+              {id:'u', label:'설정 단위', type:'select', options:['In 배수','A (2차)','A (1차)'], value:'In 배수'}, {id:'m', label:'STALL 설정', value:0.9}, {id:'td', label:'TIME DELAY [s]', value:3},
               {id:'st', label:'START TIME [s]', value:10}, {id:'p', label:'동작시간 주입 [%]', value:120} ] },
   '51LR':{ name: '51LR LOCKED (구속, 반한시)', desc: 'GIPAM 기준 기동 시 보호. 곡선 시간 + START TIME', fields: [
-              {id:'m', label:'LOCK 설정 [In]', value:1.7}, curveSel('cv'), {id:'tl', label:'레버 (TL)', value:0.21},
+              {id:'u', label:'설정 단위', type:'select', options:['In 배수','A (2차)','A (1차)'], value:'In 배수'}, {id:'m', label:'LOCK 설정', value:1.7}, curveSel('cv'), {id:'tl', label:'레버 (TL)', value:0.21},
               {id:'st', label:'START TIME [s]', value:10}, {id:'p', label:'동작시간 주입 [%]', value:200} ] },
   '49':  { name: '49 열동 (THR)', desc: 'IM = 설정 전류. 시험 % 는 IM 기준 (메모: IM × 3)', fields: [
-              {id:'m', label:'IM 설정 [In]', value:0.5}, {id:'tau', label:'THERMAL FACTOR τ [min]', value:10},
+              {id:'u', label:'설정 단위', type:'select', options:['In 배수','A (2차)','A (1차)'], value:'In 배수'}, {id:'m', label:'IM 설정', value:0.5}, {id:'tau', label:'THERMAL FACTOR τ [min]', value:10},
               {id:'k', label:'MULTIPLE FACTOR k', value:1}, {id:'p1', label:'주입 1 [%]', value:300}, {id:'p2', label:'주입 2 [%]', value:200} ] },
 };
 
@@ -162,21 +163,25 @@ function rng(center, tolAbs) { return { lo: center - tolAbs, mid: center, hi: ce
 function compute() {
   const In = num('In'), Vn = num('Vn'), Von = num('Von'), tol = num('tol')/100, tolms = num('tolms'), maxA = num('maxA');
   const g = id => num('f_' + id), gs = id => $('f_' + id)?.value;
+  const u = gs('u') || '', ctp = num('ctp');
+  const IB = u === 'A (2차)' ? 1 : u === 'A (1차)' ? In / ctp : In;   // 설정값 → 2차 A
+  const VB = b => u.startsWith('V (') ? 1 : b;
   const R = []; const notes = [];
   const tp = isFinite(g('tp')) ? g('tp')/100 : tol, tt = isFinite(g('tt')) ? g('tt')/100 : tol, tmin = g('tmin');
   const pick = (title, center, unit, d, inj) => R.push({ title, inj, unit, d, ...rng(center, center * tp) });
   const tpct = (title, center, inj) => R.push({ title, inj, unit: 's', d: 3, ...rng(center, Math.max(center * tt, isFinite(tmin) ? tmin/1000 : 0)) });
   const tms = (title, center, inj) => R.push({ title, inj, unit: 'ms', d: 1, ...rng(center, isFinite(tmin) ? tmin : tolms) });
 
+  if (u === 'A (1차)') notes.push(`1차 설정 → 2차 = 설정 × ${f(In,0)} ÷ ${f(ctp,0)} (CT ${f(ctp,0)}/${f(In,0)})`);
   switch (cur) {
     case '50': {
-      const A = g('m') * In, over = A > maxA, At = over ? g('tm') * In : A;
-      if (over) notes.push(`실제 설정 ${f(A,2)}A는 시험기 최대 ${maxA}A 초과 → ${f(g('tm'),2)}In(${f(At,2)}A)로 바꿔 시험, 끝나면 환원`);
+      const A = g('m') * IB, over = A > maxA, At = over ? g('tm') * IB : A;
+      if (over) notes.push(`실제 설정 ${f(A,2)}A는 시험기 최대 ${maxA}A 초과 → 시험용 ${f(At,2)}A로 바꿔 시험, 끝나면 환원`);
       pick(over ? '최소동작 (시험용 설정)' : '최소동작', At, 'A', 2, `${f(At,2)}A 아래에서 0.01A씩 올림`);
       tms('동작시간', g('td'), `${g('p')}% = ${f(At * g('p')/100, 2)}A`);
       break; }
     case '51': {
-      const A = g('m') * In, fn = CURVES[gs('cv')];
+      const A = g('m') * IB, fn = CURVES[gs('cv')];
       pick('최소동작', A, 'A', 2, `${f(A,2)}A 아래에서 0.01A씩 올림`);
       for (const p of [g('p1'), g('p2')]) {
         const M = p/100, t = fn(M) * g('tl') + g('c');
@@ -186,7 +191,7 @@ function compute() {
       }
       break; }
     case '27': case '59': case '64': {
-      const base = cur === '64' ? Von : Vn, V = g('m') * base;
+      const base = VB(cur === '64' ? Von : Vn), V = g('m') * base;
       pick('최소동작', V, 'V', 2, cur === '27' ? `${f(V,1)}V 위에서 0.1V씩 내림` : `${f(V,1)}V 아래에서 0.1V씩 올림`);
       tpct('동작시간', g('td'), `${g('p')}% = ${f(V*g('p')/100,2)}V`);
       break; }
@@ -200,7 +205,7 @@ function compute() {
       if (ub <= g('s')) notes.push(`한 상 ${f(Vx,1)}V면 불평형률 ${f(ub,1)}%로 설정 이하라 동작하지 않음`);
       break; }
     case '46': {
-      const A = g('m') * In;
+      const A = g('m') * IB;
       pick('최소동작 (I2)', A, 'A', 3, `3상 상순 반대로 0.01A씩 올림`);
       tpct('동작시간', g('td'), `${g('p')}% = ${f(A*g('p')/100,3)}A`);
       notes.push('한 상에만 주입하면 I2 = 주입전류 ÷ 3 → 3배를 넣어야 함');
@@ -217,18 +222,18 @@ function compute() {
       tms('동작시간', g('td'), `각도 ${g('rca')}°`);
       break; }
     case '48': {
-      const A = g('m') * In;
+      const A = g('m') * IB;
       pick('최소동작', A, 'A', 2, `${f(A,2)}A 아래에서 0.01A씩 올림`);
       tpct('동작시간', g('td') + g('st'), `${g('p')}% = ${f(A*g('p')/100,2)}A, ${g('td')}s + START ${g('st')}s`);
       break; }
     case '51LR': {
-      const A = g('m') * In, M = g('p')/100, t = CURVES[gs('cv')](M) * g('tl') + g('st');
+      const A = g('m') * IB, M = g('p')/100, t = CURVES[gs('cv')](M) * g('tl') + g('st');
       pick('최소동작', A, 'A', 2, `${f(A,2)}A 아래에서 0.01A씩 올림`);
       if (A * M > maxA) notes.push(`${g('p')}% = ${f(A*M,2)}A 는 시험기 최대 ${maxA}A 초과`);
       tpct('동작시간', t, `${g('p')}% = ${f(A*M,2)}A, 곡선 + START ${g('st')}s`);
       break; }
     case '49': {
-      const A = g('m') * In, k = g('k'), tau = g('tau') * 60;
+      const A = g('m') * IB, k = g('k'), tau = g('tau') * 60;
       pick('최소동작', A, 'A', 2, `${f(A,2)}A 아래에서 0.01A씩 올림`);
       for (const p of [g('p1'), g('p2')]) {
         const M = p/100;
@@ -293,7 +298,7 @@ $('common').addEventListener('input', ev => { store.set('rc_' + ev.target.id, ev
 $('meas').addEventListener('input', renderVerdict);
 $('measTarget').addEventListener('change', renderVerdict);
 
-for (const id of ['In','Vn','Von','tol','tolms','maxA']) { const v = store.get('rc_' + id); if (v !== null) $(id).value = v; }
+for (const id of ['In','Vn','Von','tol','tolms','maxA','ctp']) { const v = store.get('rc_' + id); if (v !== null) $(id).value = v; }
 const sc = store.get('rc_cur'); if (sc && E[sc]) cur = sc;
 renderChips(); renderInputs(); renderResults();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
