@@ -135,8 +135,8 @@ const E = {
               {id:'u', label:'설정 단위', type:'select', options:['Vn 배수','V (2차)'], value:'Vn 배수'}, {id:'vb', label:'기준 전압', type:'select', options:['110 (선간)','63.5 (상, 110÷√3)','공통 Vn'], value:'110 (선간)'}, {id:'m', label:'설정', value:1.1}, {id:'td', label:'TIME DELAY [s]', value:2}, {id:'p', label:'동작시간 주입 [%]', value:120} ] },
   '64':  { name: '64 지락 과전압 (OVGR)', desc: 'GPT 영상전압 Vo 단자에 인가', fields: [
               {id:'u', label:'설정 단위', type:'select', options:['Von 배수','V (2차)'], value:'Von 배수'}, {id:'m', label:'설정', value:0.2}, {id:'td', label:'TIME DELAY [s]', value:2}, {id:'p', label:'동작시간 주입 [%]', value:120} ] },
-  '47P': { name: '47P 결상·전압 불평형 (POR)', desc: '설정 %를 R상 전압으로 바꿔 줌 (S·T는 기준 전압 그대로). 계전기가 선간(110V)인지 상(63.5V)인지 확인', fields: [
-              {id:'vb', label:'기준 전압', type:'select', options:['110 (선간)','63.5 (상, 110÷√3)','공통 Vn'], value:'110 (선간)'}, {id:'s', label:'설정 불평형률 [%]', value:20}, {id:'td', label:'TIME DELAY [s]', value:2}, {id:'p', label:'동작시간: 계산 전압의 [%]', value:80}, {id:'mv', label:'측정한 R상 픽업 전압 [V] → 불평형률', value:''} ] },
+  '47P': { name: '47P 결상·전압 불평형 (POR)', desc: '설정 %를 R상 전압으로 바꿔 줌 (S·T는 기준 전압 그대로). 계전기가 선간(110V)인지 상(63.5V)인지, 불평형률 계산법(GIPAM3000은 NEMA/XGIPAM/G2K 설정)을 확인', fields: [
+              {id:'vb', label:'기준 전압', type:'select', options:['110 (선간)','63.5 (상, 110÷√3)','공통 Vn'], value:'110 (선간)'}, {id:'ub', label:'불평형률 계산법', type:'select', options:['G2K (Vmax−Vmin)/Vavg','NEMA·XGIPAM Max|V−Vavg|/Vavg'], value:'G2K (Vmax−Vmin)/Vavg'}, {id:'s', label:'설정 불평형률 [%]', value:20}, {id:'td', label:'TIME DELAY [s]', value:2}, {id:'p', label:'동작시간: 계산 전압의 [%]', value:80}, {id:'mv', label:'측정한 R상 픽업 전압 [V] → 불평형률', value:''} ] },
   '46':  { name: '46 역상 과전류 (NSOCR)', desc: '3상 상순 반대로 주입하면 상전류 = I2', fields: [
               {id:'u', label:'설정 단위', type:'select', options:['In 배수','A (2차)','A (1차)'], value:'In 배수'}, {id:'m', label:'I2 설정', value:0.08}, {id:'td', label:'TIME DELAY [s]', value:4}, {id:'p', label:'동작시간 주입 [%]', value:200} ] },
   '67G': { name: '67G 방향 지락 (SGR)', desc: 'ZCT 2차 설정 → 1차 주입값으로 환산', fields: [
@@ -199,16 +199,21 @@ function compute() {
       break; }
     case '47P': {
       const s = g('s')/100, tpp = isFinite(g('tp')) ? g('tp')/100 : tol;
-      const X = v => VnE * (3 - 2*v) / (3 + v);          // 두 상 VnE, 한 상 X → 불평형률 v
+      const nema = (gs('ub') || '').startsWith('NEMA');
+      // 두 상 B, 한 상 X(낮춤), Vavg = (2B+X)/3
+      // G2K: (B−X)/Vavg = v → X = B(3−2v)/(3+v)   NEMA/XGIPAM: (Vavg−X)/Vavg = 2(B−X)/(2B+X) = v → X = B(2−2v)/(2+v)
+      const X = v => nema ? VnE * (2 - 2*v) / (2 + v) : VnE * (3 - 2*v) / (3 + v);
+      const UB = x => nema ? 2*(VnE - x) / (2*VnE + x) * 100 : (VnE - x) / ((2*VnE + x)/3) * 100;
       const x0 = X(s), xa = X(s*(1+tpp)), xb = X(s*(1-tpp));
       R.push({ title: '최소동작 전압 (R상)', inj: `S·T ${f(VnE,1)}V, R상 ${f(x0+1.5,1)}V에서 0.1V씩 내림`, unit: 'V', d: 2, lo: xa, mid: x0, hi: xb });
       R.push({ title: '최소동작 (불평형률로 보면)', inj: `설정 ${f(g('s'),1)}%`, unit: '%', d: 2, ...rng(g('s'), g('s')*tpp) });
-      const Vx = x0 * g('p')/100, ub = (VnE - Vx) / ((2*VnE + Vx)/3) * 100;
+      const Vx = x0 * g('p')/100, ub = UB(Vx);
       tpct('동작시간', g('td'), `R상 ${f(x0,2)} × ${g('p')}% = ${f(Vx,2)}V (불평형률 ${f(ub,1)}%)`);
-      notes.push(`계산: (${f(VnE,1)} − X) ÷ ((${f(2*VnE,1)} + X) ÷ 3) × 100 = ${f(g('s'),1)}% → X = ${f(x0,2)}V`);
+      notes.push(nema ? `NEMA/XGIPAM: (Vavg − X) ÷ Vavg × 100 = ${f(g('s'),1)}%, Vavg = (${f(2*VnE,1)} + X) ÷ 3 → X = ${f(x0,2)}V`
+                      : `G2K: (${f(VnE,1)} − X) ÷ ((${f(2*VnE,1)} + X) ÷ 3) × 100 = ${f(g('s'),1)}% → X = ${f(x0,2)}V`);
       const mv = g('mv');
       if (isFinite(mv)) {
-        const um = (VnE - mv) / ((2*VnE + mv)/3) * 100, lo = g('s')*(1-tpp), hi = g('s')*(1+tpp);
+        const um = UB(mv), lo = g('s')*(1-tpp), hi = g('s')*(1+tpp);
         R.unshift({ single: true, title: '측정 전압 → 불평형률 (보고서 기록값)', inj: `R상 ${f(mv,2)}V, S·T ${f(VnE,1)}V`, val: um, unit: '%', d: 2,
                     ok: um >= lo - 1e-9 && um <= hi + 1e-9, rangeTxt: `${f(lo,2)} ~ ${f(hi,2)}%` });
       }
