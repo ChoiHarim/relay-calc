@@ -58,6 +58,7 @@ details[open] summary{margin-bottom:10px}
 .verdict.ng{color:var(--warn);background:var(--warn-soft)}
 .tolbox{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
 .tolbox summary{font-size:.85rem}
+.range .bad{color:var(--warn)}
 .foot{font-size:.75rem;color:var(--muted)}
 </style>
 </head><body>
@@ -135,7 +136,7 @@ const E = {
   '64':  { name: '64 지락 과전압 (OVGR)', desc: 'GPT 영상전압 Vo 단자에 인가', fields: [
               {id:'u', label:'설정 단위', type:'select', options:['Von 배수','V (2차)'], value:'Von 배수'}, {id:'m', label:'설정', value:0.2}, {id:'td', label:'TIME DELAY [s]', value:2}, {id:'p', label:'동작시간 주입 [%]', value:120} ] },
   '47P': { name: '47P 결상·전압 불평형 (POR)', desc: '설정 %를 R상 전압으로 바꿔 줌 (S·T는 기준 전압 그대로). 계전기가 선간(110V)인지 상(63.5V)인지 확인', fields: [
-              {id:'vb', label:'기준 전압', type:'select', options:['110 (선간)','63.5 (상, 110÷√3)','공통 Vn'], value:'110 (선간)'}, {id:'s', label:'설정 불평형률 [%]', value:20}, {id:'td', label:'TIME DELAY [s]', value:2}, {id:'p', label:'동작시간: 계산 전압의 [%]', value:80} ] },
+              {id:'vb', label:'기준 전압', type:'select', options:['110 (선간)','63.5 (상, 110÷√3)','공통 Vn'], value:'110 (선간)'}, {id:'s', label:'설정 불평형률 [%]', value:20}, {id:'td', label:'TIME DELAY [s]', value:2}, {id:'p', label:'동작시간: 계산 전압의 [%]', value:80}, {id:'mv', label:'측정한 R상 픽업 전압 [V] → 불평형률', value:''} ] },
   '46':  { name: '46 역상 과전류 (NSOCR)', desc: '3상 상순 반대로 주입하면 상전류 = I2', fields: [
               {id:'u', label:'설정 단위', type:'select', options:['In 배수','A (2차)','A (1차)'], value:'In 배수'}, {id:'m', label:'I2 설정', value:0.08}, {id:'td', label:'TIME DELAY [s]', value:4}, {id:'p', label:'동작시간 주입 [%]', value:200} ] },
   '67G': { name: '67G 방향 지락 (SGR)', desc: 'ZCT 2차 설정 → 1차 주입값으로 환산', fields: [
@@ -205,6 +206,12 @@ function compute() {
       const Vx = x0 * g('p')/100, ub = (VnE - Vx) / ((2*VnE + Vx)/3) * 100;
       tpct('동작시간', g('td'), `R상 ${f(x0,2)} × ${g('p')}% = ${f(Vx,2)}V (불평형률 ${f(ub,1)}%)`);
       notes.push(`계산: (${f(VnE,1)} − X) ÷ ((${f(2*VnE,1)} + X) ÷ 3) × 100 = ${f(g('s'),1)}% → X = ${f(x0,2)}V`);
+      const mv = g('mv');
+      if (isFinite(mv)) {
+        const um = (VnE - mv) / ((2*VnE + mv)/3) * 100, lo = g('s')*(1-tpp), hi = g('s')*(1+tpp);
+        R.unshift({ single: true, title: '측정 전압 → 불평형률 (보고서 기록값)', inj: `R상 ${f(mv,2)}V, S·T ${f(VnE,1)}V`, val: um, unit: '%', d: 2,
+                    ok: um >= lo - 1e-9 && um <= hi + 1e-9, rangeTxt: `${f(lo,2)} ~ ${f(hi,2)}%` });
+      }
       if (ub <= g('s')) notes.push(`R상 ${f(Vx,1)}V면 불평형률 ${f(ub,1)}%로 설정 이하라 동작하지 않음`);
       break; }
     case '46': {
@@ -266,15 +273,21 @@ function renderInputs() {
 
 function renderResults() {
   const { R, notes } = compute();
-  $('results').innerHTML = notes.map(n => `<div class="note">${n}</div>`).join('') + R.map(r => `
+  $('results').innerHTML = notes.map(n => `<div class="note">${n}</div>`).join('') + R.map(r => r.single ? `
+    <div class="res">
+      <div class="t"><span>${r.title}</span><span class="inj">${r.inj}</span></div>
+      <div class="range"><span class="${r.ok ? 'lo' : 'bad'}">${f(r.val, r.d)}</span><span class="u">${r.unit}</span>
+        <span class="verdict ${r.ok ? 'ok' : 'ng'}">${r.ok ? '양호' : '범위 밖'}</span><span class="u">판정 ${r.rangeTxt}</span></div>
+    </div>` : `
     <div class="res">
       <div class="t"><span>${r.title}</span><span class="inj">${r.inj}</span></div>
       <div class="range"><span class="lo">${f(r.lo, r.d)}</span><span class="u">~</span><span class="mid">${f(r.mid, r.d)}</span><span class="u">~</span><span class="hi">${f(r.hi, r.d)}</span><span class="u">${r.unit}</span></div>
     </div>`).join('');
   const sel = $('measTarget'), prev = sel.value;
-  sel.innerHTML = R.map((r, i) => `<option value="${i}">${r.title} (${f(r.lo, r.d)} ~ ${f(r.hi, r.d)} ${r.unit})</option>`).join('');
-  if (prev && +prev < R.length) sel.value = prev;
-  window._R = R; renderVerdict();
+  const RR = R.filter(r => !r.single);
+  sel.innerHTML = RR.map((r, i) => `<option value="${i}">${r.title} (${f(r.lo, r.d)} ~ ${f(r.hi, r.d)} ${r.unit})</option>`).join('');
+  if (prev && +prev < RR.length) sel.value = prev;
+  window._R = RR; renderVerdict();
 }
 
 function renderVerdict() {
