@@ -137,6 +137,8 @@ const E = {
               {id:'u', label:'설정 단위', type:'select', options:['Von 배수','V (2차)'], value:'Von 배수'}, {id:'m', label:'설정', value:0.2}, {id:'td', label:'TIME DELAY [s]', value:2}, {id:'p', label:'동작시간 주입 [%]', value:120} ] },
   '47P': { name: '47P 결상·전압 불평형 (POR)', desc: '설정 %를 R상 전압으로 바꿔 줌 (S·T는 기준 전압 그대로). 계전기가 선간(110V)인지 상(63.5V)인지, 불평형률 계산법(GIPAM3000은 NEMA/XGIPAM/G2K 설정)을 확인', fields: [
               {id:'vb', label:'기준 전압', type:'select', options:['110 (선간)','63.5 (상, 110÷√3)','공통 Vn'], value:'110 (선간)'}, {id:'ub', label:'불평형률 계산법', type:'select', options:['G2K (Vmax−Vmin)/Vavg','NEMA·XGIPAM Max|V−Vavg|/Vavg'], value:'G2K (Vmax−Vmin)/Vavg'}, {id:'s', label:'설정 불평형률 [%]', value:20}, {id:'td', label:'TIME DELAY [s]', value:2}, {id:'p', label:'동작시간: 계산 전압의 [%]', value:80}, {id:'mv', label:'측정한 R상 픽업 전압 [V] → 불평형률', value:''} ] },
+  '47N': { name: '47N 역상 과전압 (NSOVR)', desc: '3상 상순 반대로 인가하면 상 전압 = V2. 3상을 같이 0.1V씩 올림 (상순 반대 유지)', fields: [
+              {id:'u', label:'설정 단위', type:'select', options:['Vn 배수','V (2차)'], value:'Vn 배수'}, {id:'vb', label:'기준 전압', type:'select', options:['110 (선간)','63.5 (상, 110÷√3)','공통 Vn'], value:'110 (선간)'}, {id:'m', label:'V2 설정', value:0.2}, {id:'td', label:'TIME DELAY [s]', value:2}, {id:'p', label:'동작시간 주입 [%]', value:120} ] },
   '46':  { name: '46 역상 과전류 (NSOCR)', desc: '3상 상순 반대로 주입하면 상전류 = I2', fields: [
               {id:'u', label:'설정 단위', type:'select', options:['In 배수','A (2차)','A (1차)'], value:'In 배수'}, {id:'m', label:'I2 설정', value:0.08}, {id:'td', label:'TIME DELAY [s]', value:4}, {id:'p', label:'동작시간 주입 [%]', value:200} ] },
   '67G': { name: '67G 방향 지락 (SGR)', desc: 'ZCT 2차 설정 → 1차 주입값으로 환산', fields: [
@@ -218,6 +220,12 @@ function compute() {
                     ok: um >= lo - 1e-9 && um <= hi + 1e-9, rangeTxt: `${f(lo,2)} ~ ${f(hi,2)}%` });
       }
       if (ub <= g('s')) notes.push(`R상 ${f(Vx,1)}V면 불평형률 ${f(ub,1)}%로 설정 이하라 동작하지 않음`);
+      break; }
+    case '47N': {
+      const V = g('m') * VB(VnE);
+      pick('최소동작 (V2)', V, 'V', 2, `3상 상순 반대, ${f(Math.max(V-2.5,0),1)}V에서 3상 같이 0.1V씩 올림`);
+      tpct('동작시간', g('td'), `${g('p')}% = 3상 ${f(V*g('p')/100,2)}V (상순 반대)`);
+      notes.push('한 상에만 전압을 주면 V2 = 주입전압 ÷ 3 → 3배를 넣어야 함');
       break; }
     case '46': {
       const A = g('m') * IB;
