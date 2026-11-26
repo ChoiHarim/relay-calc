@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="ko"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="판정계산기">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.png">
+<title>계전기 판정 계산기</title>
+<style>
+/* Layout: one narrow column for a phone in one hand — element chips, inputs, then result cards with big pass ranges */
+:root{
+  --bg:#f3f5f7; --panel:#ffffff; --fg:#17212b; --muted:#5d6b78; --line:#d8dee5;
+  --accent:#0b6e8a; --accent-soft:#e2f0f4; --ok:#1f7a4a; --ok-soft:#e5f3eb; --warn:#9a5b00; --warn-soft:#fbf0dc;
+  --font-body:"Noto Sans KR",-apple-system,"Apple SD Gothic Neo",sans-serif;
+  --font-num:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#10161c; --panel:#18212a; --fg:#e6ecf1; --muted:#93a1ae; --line:#2b3741;
+  --accent:#4cb8d6; --accent-soft:#16323c; --ok:#5fcf90; --ok-soft:#143021; --warn:#f0b35a; --warn-soft:#3a2a12; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#10161c; --panel:#18212a; --fg:#e6ecf1; --muted:#93a1ae; --line:#2b3741;
+  --accent:#4cb8d6; --accent-soft:#16323c; --ok:#5fcf90; --ok-soft:#143021; --warn:#f0b35a; --warn-soft:#3a2a12; color-scheme:dark}
+*{box-sizing:border-box}
+html{padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:15px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:14px 40px}
+.wrap{max-width:560px;margin:0 auto;display:grid;gap:14px}
+h1{font-size:1.25rem;margin:0;font-weight:700;letter-spacing:-.01em}
+.sub{color:var(--muted);font-size:.85rem;margin:2px 0 0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:999px;padding:7px 12px;
+  font:600 .9rem var(--font-num);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+.chip:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px}
+.ename{font-weight:700;font-size:1.05rem;margin:0 0 2px}
+.edesc{color:var(--muted);font-size:.82rem;margin:0 0 10px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+label{display:grid;gap:3px;font-size:.78rem;color:var(--muted);min-width:0}
+input,select{width:100%;min-width:0;font:500 1.05rem var(--font-num);color:var(--fg);background:var(--bg);
+  border:1px solid var(--line);border-radius:8px;padding:8px 9px}
+.hint{font-size:.72rem;color:var(--muted)}
+details summary{cursor:pointer;font-size:.88rem;font-weight:600;color:var(--muted)}
+details[open] summary{margin-bottom:10px}
+.results{display:grid;gap:8px}
+.res{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:grid;gap:4px}
+.res .t{font-size:.8rem;color:var(--muted);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.res .inj{font:600 .82rem var(--font-num);color:var(--accent);background:var(--accent-soft);border-radius:6px;padding:1px 7px}
+.range{font:600 1.35rem var(--font-num);font-variant-numeric:tabular-nums;display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+.range .lo,.range .hi{color:var(--ok)}
+.range .mid{font-size:.95rem;color:var(--fg);opacity:.75}
+.range .u{font-size:.85rem;color:var(--muted)}
+.note{font-size:.8rem;color:var(--warn);background:var(--warn-soft);border-radius:8px;padding:6px 9px}
+.check{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+.verdict{font-weight:700;font-size:.9rem;border-radius:6px;padding:4px 10px}
+.verdict.ok{color:var(--ok);background:var(--ok-soft)}
+.verdict.ng{color:var(--warn);background:var(--warn-soft)}
+.foot{font-size:.75rem;color:var(--muted)}
+</style>
+</head><body>
+
+
+<div class="wrap">
+  <header>
+    <h1>계전기 판정 계산기</h1>
+    <p class="sub">설정값을 넣으면 픽업·동작시간 판정 범위가 바로 나와요. 기본 주입 %는 현장 메모 기준입니다.</p>
+  </header>
+
+  <div class="chips" id="chips" role="group" aria-label="보호요소 선택"></div>
+
+  <section class="panel" id="inputs"></section>
+
+  <section class="results" id="results" aria-live="polite"></section>
+
+  <section class="panel">
+    <div class="check">
+      <label for="meas">측정값 확인 (위 첫 번째 결과 기준)
+        <input id="meas" inputmode="decimal" placeholder="예: 5.04">
+      </label>
+      <span id="verdict" class="verdict" hidden></span>
+    </div>
+    <select id="measTarget" aria-label="확인할 항목" style="margin-top:8px"></select>
+  </section>
+
+  <details class="panel" id="common">
+    <summary>공통 설정 (정격 · 허용오차)</summary>
+    <div class="grid">
+      <label for="In">In (CT 2차 정격) [A]<input id="In" inputmode="decimal" value="5"></label>
+      <label for="Vn">Vn (PT 2차) [V]<input id="Vn" inputmode="decimal" value="110"></label>
+      <label for="Von">Von (GPT 2차) [V]<input id="Von" inputmode="decimal" value="190"></label>
+      <label for="tol">허용오차 [%]<input id="tol" inputmode="decimal" value="5"></label>
+      <label for="tolms">순시·ms 허용오차 [ms]<input id="tolms" inputmode="decimal" value="20"></label>
+      <label for="maxA">시험기 최대 전류 [A]<input id="maxA" inputmode="decimal" value="20"></label>
+    </div>
+  </details>
+
+  <p class="foot">반한시: NI 0.14/(M^0.02−1), VI 13.5/(M−1), EI 80/(M²−1) × 레버 + C. 49: τ·ln(M²/(M²−k²)). 47P 불평형률 = (Vmax−Vmin)/Vavg×100. 다른 제조사는 매뉴얼 공식을 먼저 확인하세요.</p>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const num = id => { const v = parseFloat(String($(id)?.value ?? '').replace(',', '.')); return isFinite(v) ? v : NaN; };
+const f = (v, d) => isFinite(v) ? v.toFixed(d) : '-';
+const CURVES = { VI: M => 13.5 / (M - 1), EI: M => 80 / (M * M - 1), NI: M => 0.14 / (Math.pow(M, 0.02) - 1) };
+const curveSel = (id, def='VI') => ({ id, label: '곡선', type: 'select', options: ['VI','EI','NI'], value: def });
+
+const E = {
+  '50':  { name: '50 순시 과전류 (OCR I>>)', desc: '시험기 한계 때문에 시험용 배수로 바꿔 시험 후 환원',
+    fields: [ {id:'m', label:'순시 설정 [In]', value:10}, {id:'td', label:'TIME DELAY [ms]', value:250},
+              {id:'tm', label:'시험용 변경 배수 [In]', value:2}, {id:'p', label:'동작시간 주입 [%]', value:110} ] },
+  '51':  { name: '51 / 51G 한시 과전류 (OCR·OCGR I>)', desc: '반한시: 전류가 클수록 빨리 동작',
+    fields: [ {id:'m', label:'한시 설정 [In]', value:1}, curveSel('cv'), {id:'tl', label:'레버 (TL)', value:0.26},
+              {id:'c', label:'추가시간 C [s]', value:0}, {id:'p1', label:'주입 1 [%]', value:200}, {id:'p2', label:'주입 2 [%]', value:300} ] },
+  '27':  { name: '27 부족전압 (UVR)', desc: '전압을 내리면서 픽업 확인', fields: [
+              {id:'m', label:'설정 [Vn]', value:0.8}, {id:'td', label:'TIME DELAY [s]', value:2}, {id:'p', label:'동작시간 주입 [%]', value:80} ] },
+  '59':  { name: '59 과전압 (OVR)', desc: '전압을 올리면서 픽업 확인', fields: [
+              {id:'m', label:'설정 [Vn]', value:1.1}, {id:'td', label:'TIME DELAY [s]', value:2}, {id:'p', label:'동작시간 주입 [%]', value:120} ] },
+  '64':  { name: '64 지락 과전압 (OVGR)', desc: 'GPT 영상전압 Vo 단자에 인가', fields: [
+              {id:'m', label:'설정 [Von]', value:0.2}, {id:'td', label:'TIME DELAY [s]', value:2}, {id:'p', label:'동작시간 주입 [%]', value:120} ] },
+  '47P': { name: '47P 결상·전압 불평형 (POR)', desc: '두 상은 정격, 한 상만 내려서 불평형률 계산', fields: [
+              {id:'s', label:'설정 불평형률 [%]', value:20}, {id:'td', label:'TIME DELAY [s]', value:2}, {id:'p', label:'동작시간: 한 상 [% of Vn]', value:80} ] },
+  '46':  { name: '46 역상 과전류 (NSOCR)', desc: '3상 상순 반대로 주입하면 상전류 = I2', fields: [
+              {id:'m', label:'I2 설정 [In]', value:0.08}, {id:'td', label:'TIME DELAY [s]', value:4}, {id:'p', label:'동작시간 주입 [%]', value:200} ] },
+  '67G': { name: '67G 방향 지락 (SGR)', desc: 'ZCT 2차 설정 → 1차 주입값으로 환산', fields: [
+              {id:'vo', label:'Vo 설정 [V]', value:38}, {id:'io', label:'Io 설정 (2차) [mA]', value:0.9},
+              {id:'z1', label:'ZCT 1차 [mA]', value:200}, {id:'z2', label:'ZCT 2차 [mA]', value:1.5},
+              {id:'rca', label:'RCA [°]', value:45}, {id:'w', label:'동작영역 ± [°]', value:87},
+              {id:'at', label:'위상 허용 ± [°]', value:6}, {id:'td', label:'TIME DELAY [ms]', value:500} ] },
+  '48':  { name: '48 STALL (스톨, 정한시)', desc: 'GIPAM 기준 운전 중 보호. START TIME이 있으면 더해짐', fields: [
+              {id:'m', label:'STALL 설정 [In]', value:0.9}, {id:'td', label:'TIME DELAY [s]', value:3},
+              {id:'st', label:'START TIME [s]', value:10}, {id:'p', label:'동작시간 주입 [%]', value:120} ] },
+  '51LR':{ name: '51LR LOCKED (구속, 반한시)', desc: 'GIPAM 기준 기동 시 보호. 곡선 시간 + START TIME', fields: [
+              {id:'m', label:'LOCK 설정 [In]', value:1.7}, curveSel('cv'), {id:'tl', label:'레버 (TL)', value:0.21},
+              {id:'st', label:'START TIME [s]', value:10}, {id:'p', label:'동작시간 주입 [%]', value:200} ] },
+  '49':  { name: '49 열동 (THR)', desc: 'IM = 설정 전류. 시험 % 는 IM 기준 (메모: IM × 3)', fields: [
+              {id:'m', label:'IM 설정 [In]', value:0.5}, {id:'tau', label:'THERMAL FACTOR τ [min]', value:10},
+              {id:'k', label:'MULTIPLE FACTOR k', value:1}, {id:'p1', label:'주입 1 [%]', value:300}, {id:'p2', label:'주입 2 [%]', value:200} ] },
+};
+
+let cur = '51';
+const store = { get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } },
+                set(k,v){ try { localStorage.setItem(k,v); } catch(e){} } };
+
+function rng(center, tolAbs) { return { lo: center - tolAbs, mid: center, hi: center + tolAbs }; }
+
+function compute() {
+  const In = num('In'), Vn = num('Vn'), Von = num('Von'), tol = num('tol')/100, tolms = num('tolms'), maxA = num('maxA');
+  const g = id => num('f_' + id), gs = id => $('f_' + id)?.value;
+  const R = []; const notes = [];
+  const pick = (title, center, unit, d, inj) => R.push({ title, inj, unit, d, ...rng(center, center * tol) });
+  const tpct = (title, center, inj) => R.push({ title, inj, unit: 's', d: 3, ...rng(center, center * tol) });
+  const tms = (title, center, inj) => R.push({ title, inj, unit: 'ms', d: 1, ...rng(center, tolms) });
+
+  switch (cur) {
+    case '50': {
+      const A = g('m') * In, At = g('tm') * In;
+      if (A > maxA) notes.push(`실제 설정 ${f(A,2)}A는 시험기 최대 ${maxA}A 초과 → ${f(g('tm'),2)}In(${f(At,2)}A)로 바꿔 시험, 끝나면 환원`);
+      pick('최소동작 (시험용 설정)', At, 'A', 2, `${f(At,2)}A 아래에서 0.01A씩 올림`);
+      tms('동작시간', g('td'), `${g('p')}% = ${f(At * g('p')/100, 2)}A`);
+      break; }
+    case '51': {
+      const A = g('m') * In, fn = CURVES[gs('cv')];
+      pick('최소동작', A, 'A', 2, `${f(A,2)}A 아래에서 0.01A씩 올림`);
+      for (const p of [g('p1'), g('p2')]) {
+        const M = p/100, t = fn(M) * g('tl') + g('c');
+        if (!(M > 1)) { notes.push(`${p}% 는 설정 이하라 동작하지 않음`); continue; }
+        if (A * M > maxA) notes.push(`${p}% = ${f(A*M,2)}A 는 시험기 최대 ${maxA}A 초과`);
+        tpct(`동작시간 ${p}%`, t, `${p}% = ${f(A*M,2)}A`);
+      }
+      break; }
+    case '27': case '59': case '64': {
+      const base = cur === '64' ? Von : Vn, V = g('m') * base;
+      pick('최소동작', V, 'V', 2, cur === '27' ? `${f(V,1)}V 위에서 0.1V씩 내림` : `${f(V,1)}V 아래에서 0.1V씩 올림`);
+      tpct('동작시간', g('td'), `${g('p')}% = ${f(V*g('p')/100,2)}V`);
+      break; }
+    case '47P': {
+      const s = g('s')/100, X = v => Vn * (3 - 2*v) / (3 + v);
+      const x0 = X(s), xa = X(s*(1+tol)), xb = X(s*(1-tol));
+      R.push({ title: '최소동작 (불평형률)', inj: `두 상 ${f(Vn,0)}V`, unit: '%', d: 2, ...rng(g('s'), g('s')*tol) });
+      R.push({ title: '최소동작 (한 상 전압으로 보면)', inj: `한 상을 내리며 확인`, unit: 'V', d: 2, lo: xa, mid: x0, hi: xb });
+      const Vx = Vn * g('p')/100, ub = (Vn - Vx) / ((2*Vn + Vx)/3) * 100;
+      tpct('동작시간', g('td'), `한 상 ${f(Vx,1)}V → 불평형률 ${f(ub,1)}%`);
+      if (ub <= g('s')) notes.push(`한 상 ${f(Vx,1)}V면 불평형률 ${f(ub,1)}%로 설정 이하라 동작하지 않음`);
+      break; }
+    case '46': {
+      const A = g('m') * In;
+      pick('최소동작 (I2)', A, 'A', 3, `3상 상순 반대로 0.01A씩 올림`);
+      tpct('동작시간', g('td'), `${g('p')}% = ${f(A*g('p')/100,3)}A`);
+      notes.push('한 상에만 주입하면 I2 = 주입전류 ÷ 3 → 3배를 넣어야 함');
+      break; }
+    case '67G': {
+      const r = g('z1')/g('z2'), io1 = g('io') * r;
+      pick('최소동작 Vo', g('vo'), 'V', 2, `Io는 1차값보다 조금 높게`);
+      pick('최소동작 Io (2차)', g('io'), 'mA', 3, `ZCT ${g('z1')}/${g('z2')}mA`);
+      pick('최소동작 Io (1차 주입값)', io1, 'mA', 1, `= ${f(g('io'),2)} × ${f(r,1)}`);
+      const n = a => ((a % 360) + 360) % 360;
+      const b1 = n(g('rca') + g('w')), b2 = n(g('rca') - g('w')), at = g('at');
+      R.push({ title: '동작위상 경계 1', inj: `RCA + ${g('w')}°`, unit: '°', d: 1, lo: b1 - at, mid: b1, hi: b1 + at });
+      R.push({ title: '동작위상 경계 2', inj: `RCA − ${g('w')}° (= ${f(b2-360,1)}°)`, unit: '°', d: 1, lo: b2 - at, mid: b2, hi: b2 + at });
+      tms('동작시간', g('td'), `각도 ${g('rca')}°`);
+      break; }
+    case '48': {
+      const A = g('m') * In;
+      pick('최소동작', A, 'A', 2, `${f(A,2)}A 아래에서 0.01A씩 올림`);
+      tpct('동작시간', g('td') + g('st'), `${g('p')}% = ${f(A*g('p')/100,2)}A, ${g('td')}s + START ${g('st')}s`);
+      break; }
+    case '51LR': {
+      const A = g('m') * In, M = g('p')/100, t = CURVES[gs('cv')](M) * g('tl') + g('st');
+      pick('최소동작', A, 'A', 2, `${f(A,2)}A 아래에서 0.01A씩 올림`);
+      if (A * M > maxA) notes.push(`${g('p')}% = ${f(A*M,2)}A 는 시험기 최대 ${maxA}A 초과`);
+      tpct('동작시간', t, `${g('p')}% = ${f(A*M,2)}A, 곡선 + START ${g('st')}s`);
+      break; }
+    case '49': {
+      const A = g('m') * In, k = g('k'), tau = g('tau') * 60;
+      pick('최소동작', A, 'A', 2, `${f(A,2)}A 아래에서 0.01A씩 올림`);
+      for (const p of [g('p1'), g('p2')]) {
+        const M = p/100;
+        if (!(M > k)) { notes.push(`${p}% 는 k(${k}) 이하라 동작하지 않음`); continue; }
+        const t = tau * Math.log(M*M / (M*M - k*k));
+        tpct(`동작시간 ${p}%`, t, `IM × ${f(M,2)} = ${f(A*M,2)}A`);
+      }
+      notes.push('시험 전 열 누적값이 0(냉간)인지 확인');
+      break; }
+  }
+  return { R, notes };
+}
+
+function renderInputs() {
+  const e = E[cur];
+  const saved = JSON.parse(store.get('rc_' + cur) || '{}');
+  $('inputs').innerHTML = `<p class="ename">${e.name}</p><p class="edesc">${e.desc}</p><div class="grid">` +
+    e.fields.map(fd => {
+      const v = saved[fd.id] ?? fd.value;
+      if (fd.type === 'select') return `<label for="f_${fd.id}">${fd.label}<select id="f_${fd.id}">${fd.options.map(o => `<option${o===v?' selected':''}>${o}</option>`).join('')}</select></label>`;
+      return `<label for="f_${fd.id}">${fd.label}<input id="f_${fd.id}" inputmode="decimal" value="${v}"></label>`;
+    }).join('') + `</div>`;
+}
+
+function renderResults() {
+  const { R, notes } = compute();
+  $('results').innerHTML = notes.map(n => `<div class="note">${n}</div>`).join('') + R.map(r => `
+    <div class="res">
+      <div class="t"><span>${r.title}</span><span class="inj">${r.inj}</span></div>
+      <div class="range"><span class="lo">${f(r.lo, r.d)}</span><span class="u">~</span><span class="mid">${f(r.mid, r.d)}</span><span class="u">~</span><span class="hi">${f(r.hi, r.d)}</span><span class="u">${r.unit}</span></div>
+    </div>`).join('');
+  const sel = $('measTarget'), prev = sel.value;
+  sel.innerHTML = R.map((r, i) => `<option value="${i}">${r.title} (${f(r.lo, r.d)} ~ ${f(r.hi, r.d)} ${r.unit})</option>`).join('');
+  if (prev && +prev < R.length) sel.value = prev;
+  window._R = R; renderVerdict();
+}
+
+function renderVerdict() {
+  const v = parseFloat(String($('meas').value).replace(',', '.')), r = (window._R || [])[+$('measTarget').value || 0], el = $('verdict');
+  if (!isFinite(v) || !r) { el.hidden = true; return; }
+  const ok = v >= r.lo - 1e-9 && v <= r.hi + 1e-9;
+  el.hidden = false; el.className = 'verdict ' + (ok ? 'ok' : 'ng'); el.textContent = ok ? '양호' : '범위 밖';
+}
+
+function renderChips() {
+  $('chips').innerHTML = Object.keys(E).map(k => `<button class="chip" type="button" data-k="${k}" aria-pressed="${k===cur}">${k === '51' ? '51/51G' : k}</button>`).join('');
+}
+
+$('chips').addEventListener('click', ev => {
+  const b = ev.target.closest('.chip'); if (!b) return;
+  cur = b.dataset.k; store.set('rc_cur', cur);
+  renderChips(); renderInputs(); $('meas').value = ''; renderResults();
+});
+$('inputs').addEventListener('input', () => {
+  const o = {}; for (const fd of E[cur].fields) o[fd.id] = $('f_' + fd.id).value;
+  store.set('rc_' + cur, JSON.stringify(o)); renderResults();
+});
+$('common').addEventListener('input', ev => { store.set('rc_' + ev.target.id, ev.target.value); renderResults(); });
+$('meas').addEventListener('input', renderVerdict);
+$('measTarget').addEventListener('change', renderVerdict);
+
+for (const id of ['In','Vn','Von','tol','tolms','maxA']) { const v = store.get('rc_' + id); if (v !== null) $(id).value = v; }
+const sc = store.get('rc_cur'); if (sc && E[sc]) cur = sc;
+renderChips(); renderInputs(); renderResults();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+
+</body></html>
