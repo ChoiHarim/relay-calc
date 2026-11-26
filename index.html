@@ -56,6 +56,8 @@ details[open] summary{margin-bottom:10px}
 .verdict{font-weight:700;font-size:.9rem;border-radius:6px;padding:4px 10px}
 .verdict.ok{color:var(--ok);background:var(--ok-soft)}
 .verdict.ng{color:var(--warn);background:var(--warn-soft)}
+.tolbox{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+.tolbox summary{font-size:.85rem}
 .foot{font-size:.75rem;color:var(--muted)}
 </style>
 </head><body>
@@ -95,15 +97,28 @@ details[open] summary{margin-bottom:10px}
     </div>
   </details>
 
-  <p class="foot">반한시: NI 0.14/(M^0.02−1), VI 13.5/(M−1), EI 80/(M²−1) × 레버 + C. 49: τ·ln(M²/(M²−k²)). 47P 불평형률 = (Vmax−Vmin)/Vavg×100. 다른 제조사는 매뉴얼 공식을 먼저 확인하세요.</p>
+  <p class="foot">반한시: IEC NI 0.14/(M^0.02−1), VI 13.5/(M−1), EI 80/(M²−1), LTI 120/(M−1) × 레버. IEEE·SEL: TD × (A/(M^p−1)+B). SEL 곡선은 TD 눈금이 달라 매뉴얼 확인. 49: τ·ln(M²/(M²−k²)). 47P 불평형률 = (Vmax−Vmin)/Vavg×100. 다른 제조사는 매뉴얼 공식을 먼저 확인하세요.</p>
 </div>
 
 <script>
 const $ = id => document.getElementById(id);
 const num = id => { const v = parseFloat(String($(id)?.value ?? '').replace(',', '.')); return isFinite(v) ? v : NaN; };
 const f = (v, d) => isFinite(v) ? v.toFixed(d) : '-';
-const CURVES = { VI: M => 13.5 / (M - 1), EI: M => 80 / (M * M - 1), NI: M => 0.14 / (Math.pow(M, 0.02) - 1) };
-const curveSel = (id, def='VI') => ({ id, label: '곡선', type: 'select', options: ['VI','EI','NI'], value: def });
+// IEC: t = TL × k/(M^a − 1).  IEEE C37.112 / SEL U: t = TD × (A/(M^p − 1) + B)
+const iec = (k, a) => M => k / (Math.pow(M, a) - 1);
+const ieee = (A, B, p) => M => A / (Math.pow(M, p) - 1) + B;
+const CURVES = {
+  'VI': iec(13.5, 1), 'EI': iec(80, 2), 'NI': iec(0.14, 0.02), 'LTI': iec(120, 1),
+  'IEEE MI': ieee(0.0515, 0.114, 0.02), 'IEEE VI': ieee(19.61, 0.491, 2), 'IEEE EI': ieee(28.2, 0.1217, 2),
+  'SEL U1': ieee(0.0104, 0.0226, 0.02), 'SEL U2': ieee(5.95, 0.18, 2), 'SEL U3': ieee(3.88, 0.0963, 2),
+  'SEL U4': ieee(5.67, 0.0352, 2), 'SEL U5': ieee(0.00342, 0.00262, 0.02),
+};
+const curveSel = (id, def='VI') => ({ id, label: '곡선 (IEC / IEEE / SEL)', type: 'select', options: Object.keys(CURVES), value: def });
+const TOLF = [
+  {id:'tp', label:'픽업 오차 ±[%]', value:'', tol:true},
+  {id:'tt', label:'시간 오차 ±[%]', value:'', tol:true},
+  {id:'tmin', label:'시간 최소 오차 ±[ms]', value:'', tol:true},
+];
 
 const E = {
   '50':  { name: '50 / 50G 순시 과전류 (OCR·OCGR I>>)', desc: '50G도 같은 계산. 50G는 In(N) 단자 한 곳에 주입. 시험기 최대 전류를 넘을 때만 시험용 배수로 바꿔 시험 후 환원',
@@ -148,9 +163,10 @@ function compute() {
   const In = num('In'), Vn = num('Vn'), Von = num('Von'), tol = num('tol')/100, tolms = num('tolms'), maxA = num('maxA');
   const g = id => num('f_' + id), gs = id => $('f_' + id)?.value;
   const R = []; const notes = [];
-  const pick = (title, center, unit, d, inj) => R.push({ title, inj, unit, d, ...rng(center, center * tol) });
-  const tpct = (title, center, inj) => R.push({ title, inj, unit: 's', d: 3, ...rng(center, center * tol) });
-  const tms = (title, center, inj) => R.push({ title, inj, unit: 'ms', d: 1, ...rng(center, tolms) });
+  const tp = isFinite(g('tp')) ? g('tp')/100 : tol, tt = isFinite(g('tt')) ? g('tt')/100 : tol, tmin = g('tmin');
+  const pick = (title, center, unit, d, inj) => R.push({ title, inj, unit, d, ...rng(center, center * tp) });
+  const tpct = (title, center, inj) => R.push({ title, inj, unit: 's', d: 3, ...rng(center, Math.max(center * tt, isFinite(tmin) ? tmin/1000 : 0)) });
+  const tms = (title, center, inj) => R.push({ title, inj, unit: 'ms', d: 1, ...rng(center, isFinite(tmin) ? tmin : tolms) });
 
   switch (cur) {
     case '50': {
@@ -234,7 +250,10 @@ function renderInputs() {
       const v = saved[fd.id] ?? fd.value;
       if (fd.type === 'select') return `<label for="f_${fd.id}">${fd.label}<select id="f_${fd.id}">${fd.options.map(o => `<option${o===v?' selected':''}>${o}</option>`).join('')}</select></label>`;
       return `<label for="f_${fd.id}">${fd.label}<input id="f_${fd.id}" inputmode="decimal" value="${v}"></label>`;
-    }).join('') + `</div>`;
+    }).join('') + `</div>
+    <details class="tolbox"${TOLF.some(fd => (saved[fd.id] ?? '') !== '') ? ' open' : ''}><summary>이 계전기 판정 오차 (매뉴얼 값, 비우면 공통값)</summary><div class="grid">` +
+    TOLF.map(fd => `<label for="f_${fd.id}">${fd.label}<input id="f_${fd.id}" inputmode="decimal" value="${saved[fd.id] ?? ''}" placeholder="${fd.id==='tmin' ? '순시 ' + $('tolms').value : '공통 ' + $('tol').value}"></label>`).join('') +
+    `</div><p class="hint">시간 오차 = ±%와 최소 ±ms 중 큰 값. 순시(ms) 요소는 최소 ±ms를 고정 오차로 씀.</p></details>`;
 }
 
 function renderResults() {
@@ -267,7 +286,7 @@ $('chips').addEventListener('click', ev => {
   renderChips(); renderInputs(); $('meas').value = ''; renderResults();
 });
 $('inputs').addEventListener('input', () => {
-  const o = {}; for (const fd of E[cur].fields) o[fd.id] = $('f_' + fd.id).value;
+  const o = {}; for (const fd of [...E[cur].fields, ...TOLF]) o[fd.id] = $('f_' + fd.id).value;
   store.set('rc_' + cur, JSON.stringify(o)); renderResults();
 });
 $('common').addEventListener('input', ev => { store.set('rc_' + ev.target.id, ev.target.value); renderResults(); });
