@@ -106,9 +106,9 @@ const CURVES = { VI: M => 13.5 / (M - 1), EI: M => 80 / (M * M - 1), NI: M => 0.
 const curveSel = (id, def='VI') => ({ id, label: '곡선', type: 'select', options: ['VI','EI','NI'], value: def });
 
 const E = {
-  '50':  { name: '50 순시 과전류 (OCR I>>)', desc: '시험기 한계 때문에 시험용 배수로 바꿔 시험 후 환원',
+  '50':  { name: '50 / 50G 순시 과전류 (OCR·OCGR I>>)', desc: '50G도 같은 계산. 50G는 In(N) 단자 한 곳에 주입. 시험기 최대 전류를 넘을 때만 시험용 배수로 바꿔 시험 후 환원',
     fields: [ {id:'m', label:'순시 설정 [In]', value:10}, {id:'td', label:'TIME DELAY [ms]', value:250},
-              {id:'tm', label:'시험용 변경 배수 [In]', value:2}, {id:'p', label:'동작시간 주입 [%]', value:110} ] },
+              {id:'tm', label:'시험용 변경 [In] (최대 전류 초과 시만)', value:2}, {id:'p', label:'동작시간 주입 [%]', value:110} ] },
   '51':  { name: '51 / 51G 한시 과전류 (OCR·OCGR I>)', desc: '반한시: 전류가 클수록 빨리 동작',
     fields: [ {id:'m', label:'한시 설정 [In]', value:1}, curveSel('cv'), {id:'tl', label:'레버 (TL)', value:0.26},
               {id:'c', label:'추가시간 C [s]', value:0}, {id:'p1', label:'주입 1 [%]', value:200}, {id:'p2', label:'주입 2 [%]', value:300} ] },
@@ -154,9 +154,9 @@ function compute() {
 
   switch (cur) {
     case '50': {
-      const A = g('m') * In, At = g('tm') * In;
-      if (A > maxA) notes.push(`실제 설정 ${f(A,2)}A는 시험기 최대 ${maxA}A 초과 → ${f(g('tm'),2)}In(${f(At,2)}A)로 바꿔 시험, 끝나면 환원`);
-      pick('최소동작 (시험용 설정)', At, 'A', 2, `${f(At,2)}A 아래에서 0.01A씩 올림`);
+      const A = g('m') * In, over = A > maxA, At = over ? g('tm') * In : A;
+      if (over) notes.push(`실제 설정 ${f(A,2)}A는 시험기 최대 ${maxA}A 초과 → ${f(g('tm'),2)}In(${f(At,2)}A)로 바꿔 시험, 끝나면 환원`);
+      pick(over ? '최소동작 (시험용 설정)' : '최소동작', At, 'A', 2, `${f(At,2)}A 아래에서 0.01A씩 올림`);
       tms('동작시간', g('td'), `${g('p')}% = ${f(At * g('p')/100, 2)}A`);
       break; }
     case '51': {
@@ -258,7 +258,7 @@ function renderVerdict() {
 }
 
 function renderChips() {
-  $('chips').innerHTML = Object.keys(E).map(k => `<button class="chip" type="button" data-k="${k}" aria-pressed="${k===cur}">${k === '51' ? '51/51G' : k}</button>`).join('');
+  $('chips').innerHTML = Object.keys(E).map(k => `<button class="chip" type="button" data-k="${k}" aria-pressed="${k===cur}">${k === '51' ? '51/51G' : k === '50' ? '50/50G' : k}</button>`).join('');
 }
 
 $('chips').addEventListener('click', ev => {
